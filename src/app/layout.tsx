@@ -1,10 +1,11 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "Finwise",
-  description: "App de finanças pessoais (portfólio) — Next.js + TypeScript",
+  description: "App de finanças pessoais (portfólio)",
 };
 
 export default function RootLayout({
@@ -12,7 +13,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster richColors />
+      </body>
     </html>
   );
 }
