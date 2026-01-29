@@ -1,10 +1,23 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TransactionForm } from "@/modules/transactions/ui/transaction-form";
+import { PageHeader } from "@/shared/ui/page-header/page";
+
 export default function NewTransactionPage() {
   return (
-    <section className="space-y-2">
-      <h1 className="text-2xl font-semibold">Nova transação</h1>
-      <p className="text-sm text-muted-foreground">
-        Em breve: formulário com validação (RHF + Zod).
-      </p>
-    </section>
+    <div className="space-y-6">
+      <PageHeader
+        title="Nova transação"
+        description="Registre uma entrada ou saída para atualizar seu dashboard."
+      />
+
+      <Card className="bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base">Detalhes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TransactionForm />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

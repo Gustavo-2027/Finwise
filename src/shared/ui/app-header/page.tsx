@@ -1,9 +1,10 @@
 "use client";
 
-import { LogOut, Menu, Moon, User } from "lucide-react";
+import { Check, Laptop, LogOut, Menu, Moon, Sun, User } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -25,6 +26,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { logoutAction } from "@/modules/auth/actions/logout";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard" },
@@ -36,36 +38,79 @@ const navItems = [
 ];
 
 function isActivePath(pathname: string, href: string) {
-  // Ex: /transactions e /transactions/new devem marcar "Transações"
   if (href === "/dashboard") return pathname === "/dashboard";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppHeader() {
+function getInitialsFromEmail(email?: string) {
+  if (!email) return "??";
+
+  const local = email.split("@")[0] ?? "";
+  const cleaned = local.replace(/[^a-zA-Z0-9]/g, "");
+
+  const first = cleaned[0]?.toUpperCase();
+  const second = cleaned[1]?.toUpperCase();
+
+  return `${first ?? "?"}${second ?? "?"}`;
+}
+
+function getThemeLabel(theme?: string) {
+  if (theme === "light") return "Claro";
+  if (theme === "dark") return "Escuro";
+  return "Sistema";
+}
+
+export function AppHeader({ userEmail }: { userEmail?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const initials = useMemo(() => getInitialsFromEmail(userEmail), [userEmail]);
+
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // Evita mismatch de hidratação ao ler theme/resolvedTheme
+    setMounted(true);
+  }, []);
 
   function handleProfileClick() {
-    toast("Perfil", {
-      description: "Tela de perfil entra na próxima etapa.",
-    });
+    toast("Perfil", { description: "Tela de perfil entra na próxima etapa." });
   }
 
-  function handleThemeClick() {
+  function handleThemeSelect(next: "system" | "light" | "dark") {
+    setTheme(next);
+
     toast("Tema", {
-      description: "Alternância de tema será implementada depois.",
+      description: `Tema alterado para: ${getThemeLabel(next)}`,
     });
   }
 
-  function handleLogoutClick() {
-    toast.error("Sair", {
-      description: "Logout será integrado com o Supabase no Dia 2.",
-    });
+  async function handleLogout() {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      await logoutAction();
+      toast.success("Você saiu da sua conta.");
+
+      setMobileOpen(false);
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast.error("Não foi possível sair. Tente novamente.");
+    } finally {
+      setIsLoggingOut(false);
+    }
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+    <header className="sticky top-0 z-50 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         {/* Left: Mobile menu + Logo */}
         <div className="flex items-center gap-2">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -105,6 +150,7 @@ export function AppHeader() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
                         "rounded-md px-3 py-2 text-sm transition-colors",
                         active
@@ -121,7 +167,7 @@ export function AppHeader() {
               <Separator className="my-4" />
 
               <div className="text-xs text-muted-foreground">
-                Auth entra no Dia 2 (Supabase).
+                {userEmail ? `Logado como ${userEmail}` : "Autenticação via Supabase."}
               </div>
             </SheetContent>
           </Sheet>
@@ -140,6 +186,7 @@ export function AppHeader() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "rounded-md px-3 py-2 text-sm transition-colors",
                   active
@@ -172,13 +219,21 @@ export function AppHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" aria-label="Abrir menu da conta">
                 <Avatar className="h-7 w-7">
-                  <AvatarFallback className="text-xs">GS</AvatarFallback>
+                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Minha conta</DropdownMenuLabel>
+              <DropdownMenuLabel className="flex flex-col gap-0.5">
+                <span>Minha conta</span>
+                {userEmail ? (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {userEmail}
+                  </span>
+                ) : null}
+              </DropdownMenuLabel>
+
               <DropdownMenuSeparator />
 
               <DropdownMenuItem onClick={handleProfileClick}>
@@ -186,16 +241,53 @@ export function AppHeader() {
                 Perfil
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleThemeClick}>
-                <Moon className="mr-2 h-4 w-4" />
+              <DropdownMenuSeparator />
+
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
                 Tema
+              </DropdownMenuLabel>
+
+              <DropdownMenuItem
+                onClick={() => handleThemeSelect("system")}
+                disabled={!mounted}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Laptop className="mr-2 h-4 w-4" />
+                  Sistema
+                </span>
+                {mounted && theme === "system" ? <Check className="h-4 w-4" /> : null}
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => handleThemeSelect("light")}
+                disabled={!mounted}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Sun className="mr-2 h-4 w-4" />
+                  Claro
+                </span>
+                {mounted && theme === "light" ? <Check className="h-4 w-4" /> : null}
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => handleThemeSelect("dark")}
+                disabled={!mounted}
+                className="flex items-center justify-between"
+              >
+                <span className="flex items-center">
+                  <Moon className="mr-2 h-4 w-4" />
+                  Escuro
+                </span>
+                {mounted && theme === "dark" ? <Check className="h-4 w-4" /> : null}
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem onClick={handleLogoutClick}>
+              <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
                 <LogOut className="mr-2 h-4 w-4" />
-                Sair
+                <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
