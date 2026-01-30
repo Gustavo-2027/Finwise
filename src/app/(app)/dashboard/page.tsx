@@ -7,13 +7,50 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabaseServer } from "@/infrastructure/supabase/server";
+import { cn } from "@/lib/utils";
+import { getTransactions } from "@/modules/transactions/api/get-transactions";
+import { getTransactionsSummary } from "@/modules/transactions/api/get-transactions-summary";
 import { EmptyState } from "@/shared/ui/empty-state/page";
 import { PageHeader } from "@/shared/ui/page-header/page";
 import { Skeleton } from "@/shared/ui/skeleton/page";
+
+function formatBRLFromCents(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function formatMoneyFromCents(cents: number, type: "income" | "expense") {
+  const formatted = formatBRLFromCents(cents);
+  return type === "expense" ? `- ${formatted}` : formatted;
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function TypePill({ type }: { type: "income" | "expense" }) {
+  const isIncome = type === "income";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        isIncome
+          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          : "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+      )}
+    >
+      {isIncome ? "Entrada" : "Saída"}
+    </span>
+  );
+}
 
 function StatCard({
   title,
@@ -22,6 +59,7 @@ function StatCard({
   loading,
   icon,
   badge,
+  tone,
 }: {
   title: string;
   value: string;
@@ -29,6 +67,7 @@ function StatCard({
   loading?: boolean;
   icon: React.ReactNode;
   badge?: string;
+  tone?: "neutral" | "success" | "danger";
 }) {
   return (
     <Card className="bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
@@ -38,6 +77,7 @@ function StatCard({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               {title}
             </CardTitle>
+
             {badge ? (
               <div className="mt-2 inline-flex items-center rounded-full border bg-background/60 px-2 py-0.5 text-xs text-muted-foreground">
                 {badge}
@@ -45,7 +85,14 @@ function StatCard({
             ) : null}
           </div>
 
-          <div className="grid h-9 w-9 place-items-center rounded-xl border bg-background/60 text-muted-foreground">
+          <div
+            className={cn(
+              "grid h-9 w-9 place-items-center rounded-xl border bg-background/60",
+              tone === "success" && "text-emerald-600 dark:text-emerald-400",
+              tone === "danger" && "text-rose-600 dark:text-rose-400",
+              !tone || tone === "neutral" ? "text-muted-foreground" : "",
+            )}
+          >
             {icon}
           </div>
         </div>
@@ -55,7 +102,15 @@ function StatCard({
         {loading ? (
           <Skeleton className="h-7 w-28" />
         ) : (
-          <div className="text-2xl font-semibold tracking-tight">{value}</div>
+          <div
+            className={cn(
+              "text-2xl font-semibold tracking-tight tabular-nums",
+              tone === "success" && "text-emerald-600 dark:text-emerald-400",
+              tone === "danger" && "text-rose-600 dark:text-rose-400",
+            )}
+          >
+            {value}
+          </div>
         )}
 
         {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
@@ -68,93 +123,111 @@ function QuickAction({
   title,
   description,
   icon,
+  href,
 }: {
   title: string;
   description: string;
   icon: React.ReactNode;
+  href: string;
 }) {
   return (
-    <button
-      type="button"
-      className="group flex w-full items-center justify-between gap-3 rounded-xl border bg-background/40 px-3 py-3 text-left transition-colors hover:bg-muted/40"
+    <Button
+      asChild
+      variant="ghost"
+      className={cn(
+        "h-auto w-full justify-between rounded-xl border bg-background/40 px-3 py-3 text-left",
+        "hover:bg-muted/40",
+      )}
     >
-      <div className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl border bg-background/60 text-muted-foreground">
-          {icon}
+      <Link href={href} className="group flex w-full items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl border bg-background/60 text-muted-foreground">
+            {icon}
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-sm font-medium leading-none">{title}</div>
+            <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+          </div>
         </div>
 
-        <div className="min-w-0">
-          <div className="text-sm font-medium leading-none">{title}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{description}</div>
-        </div>
-      </div>
-
-      <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-    </button>
+        <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+      </Link>
+    </Button>
   );
 }
 
 export default async function DashboardPage() {
-  const supabase = await supabaseServer();
-  const { data } = await supabase.auth.getUser();
+  const [summaryThisMonth, latest] = await Promise.all([
+    getTransactionsSummary({ month: "this-month" }),
+    getTransactions({ month: "this-month", type: "all", page: 1, pageSize: 5 }),
+  ]);
 
-  const email = data.user?.email ?? "—";
-
-  // Placeholder: aqui depois você pluga aggregates reais (saldo, entradas/saídas)
   const isLoading = false;
-  const hasTransactions = false;
+
+  const incomeCents = summaryThisMonth.ok ? summaryThisMonth.summary.incomeCents : 0;
+  const expenseCents = summaryThisMonth.ok ? summaryThisMonth.summary.expenseCents : 0;
+  const netCents = summaryThisMonth.ok ? summaryThisMonth.summary.netCents : 0;
+
+  const hasTransactions = latest.ok ? latest.result.total > 0 : false;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Bem-vindo. Sessão: ${email}`}
+        description="Visão geral do mês atual."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Sparkles className="mr-2 h-4 w-4" />
-              Dicas
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/transactions">
+                <Sparkles className="h-4 w-4" />
+                <span className="hidden sm:inline">Ver transações</span>
+              </Link>
             </Button>
 
-            <Button size="sm">
-              <Plus className="mr-2 h-4 w-4" />
-              Nova transação
+            <Button asChild size="sm" className="gap-2">
+              <Link href="/transactions/new">
+                <Plus className="h-4 w-4" />
+                Nova transação
+              </Link>
             </Button>
           </div>
         }
       />
 
-      {/* Stats */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Saldo do mês"
-          value="R$ 0,00"
-          helper="Entradas - Saídas"
-          badge="Últimos 30 dias"
+          value={formatBRLFromCents(netCents)}
+          helper="Entradas − Saídas"
+          badge="Este mês"
           loading={isLoading}
+          tone={netCents > 0 ? "success" : netCents < 0 ? "danger" : "neutral"}
           icon={<Wand2 className="h-4 w-4" />}
         />
+
         <StatCard
           title="Entradas"
-          value="R$ 0,00"
+          value={formatBRLFromCents(incomeCents)}
           helper="Somatório de receitas"
-          badge="Últimos 30 dias"
+          badge="Este mês"
           loading={isLoading}
+          tone="success"
           icon={<Plus className="h-4 w-4" />}
         />
+
         <StatCard
           title="Saídas"
-          value="R$ 0,00"
+          value={formatBRLFromCents(expenseCents)}
           helper="Somatório de despesas"
-          badge="Últimos 30 dias"
+          badge="Este mês"
           loading={isLoading}
+          tone="danger"
           icon={<Receipt className="h-4 w-4" />}
         />
       </section>
 
-      {/* Conteúdo principal */}
       <section className="grid gap-6 lg:grid-cols-3">
-        {/* Últimas transações */}
         <Card className="lg:col-span-2 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
@@ -165,8 +238,8 @@ export default async function DashboardPage() {
                 </p>
               </div>
 
-              <Button variant="outline" size="sm">
-                Ver tudo
+              <Button asChild variant="outline" size="sm">
+                <Link href="/transactions">Ver tudo</Link>
               </Button>
             </div>
           </CardHeader>
@@ -178,9 +251,39 @@ export default async function DashboardPage() {
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-12 w-full" />
               </div>
-            ) : hasTransactions ? (
-              <div className="text-sm text-muted-foreground">
-                Em breve: lista de transações.
+            ) : hasTransactions && latest.ok ? (
+              <div className="divide-y rounded-xl border bg-background/40">
+                {latest.result.rows.map((t) => (
+                  <Link
+                    key={t.id}
+                    href={`/transactions/${t.id}/edit`}
+                    className="block px-4 py-3 transition-colors hover:bg-muted/20"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="truncate text-sm font-medium">{t.title}</div>
+                          <TypePill type={t.type} />
+                        </div>
+
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {formatDate(t.occurredAt)} • {t.categoryName} • {t.accountName}
+                        </div>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "shrink-0 text-sm font-semibold tabular-nums",
+                          t.type === "income"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-foreground",
+                        )}
+                      >
+                        {formatMoneyFromCents(t.amountCents, t.type)}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             ) : (
               <EmptyState
@@ -189,13 +292,18 @@ export default async function DashboardPage() {
                 description="Crie sua primeira transação para ver o resumo do mês e insights."
                 actions={
                   <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                    <Button>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Criar transação
+                    <Button asChild className="gap-2">
+                      <Link href="/transactions/new">
+                        <Plus className="h-4 w-4" />
+                        Criar transação
+                      </Link>
                     </Button>
-                    <Button variant="outline">
-                      <FileUp className="mr-2 h-4 w-4" />
-                      Importar CSV
+
+                    <Button asChild variant="outline" className="gap-2">
+                      <Link href="/import">
+                        <FileUp className="h-4 w-4" />
+                        Importar CSV
+                      </Link>
                     </Button>
                   </div>
                 }
@@ -204,7 +312,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Ações rápidas */}
         <Card className="bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
           <CardHeader className="pb-3">
             <div className="space-y-1">
@@ -220,16 +327,21 @@ export default async function DashboardPage() {
               title="Adicionar conta"
               description="Crie uma conta para organizar entradas e saídas"
               icon={<CreditCard className="h-4 w-4" />}
+              href="/accounts"
             />
+
             <QuickAction
               title="Criar regra"
               description="Automatize categorias e descrições"
               icon={<Wand2 className="h-4 w-4" />}
+              href="/rules"
             />
+
             <QuickAction
               title="Importar CSV"
               description="Traga dados do banco em poucos cliques"
               icon={<FileUp className="h-4 w-4" />}
+              href="/import"
             />
           </CardContent>
         </Card>

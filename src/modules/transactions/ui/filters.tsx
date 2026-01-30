@@ -1,9 +1,10 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -13,15 +14,37 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type TxType = "all" | "income" | "expense";
+type MonthFilter = "this-month" | "last-month" | string;
+
 function buildQueryString(params: URLSearchParams, patch: Record<string, string | null>) {
   const next = new URLSearchParams(params);
 
-  Object.entries(patch).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(patch)) {
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
-  });
+  }
 
   return next.toString();
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function useDebouncedCallback<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  delayMs: number,
+) {
+  const tRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return useCallback(
+    (...args: Args) => {
+      if (tRef.current) clearTimeout(tRef.current);
+      tRef.current = setTimeout(() => fn(...args), delayMs);
+    },
+    [fn, delayMs],
+  );
 }
 
 export function TransactionsFilters({
@@ -30,44 +53,83 @@ export function TransactionsFilters({
   initialType,
 }: {
   initialQuery: string;
-  initialMonth: string;
-  initialType: "all" | "income" | "expense";
+  initialMonth: MonthFilter;
+  initialType: TxType;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  // Estado controlado do input/select (precisa disso pro debounce + UX)
   const [q, setQ] = useState(initialQuery);
-  const [month, setMonth] = useState(initialMonth);
-  const [type, setType] = useState<"all" | "income" | "expense">(initialType);
+  const [month, setMonth] = useState<MonthFilter>(initialMonth);
+  const [type, setType] = useState<TxType>(initialType);
 
-  const pushWithPatch = useMemo(() => {
-    return (patch: Record<string, string | null>) => {
-      const qs = buildQueryString(new URLSearchParams(params.toString()), patch);
-      router.push(qs ? `${pathname}?${qs}` : pathname);
-    };
-  }, [params, pathname, router]);
+  const pushWithPatch = useCallback(
+    (patch: Record<string, string | null>) => {
+      const current = new URLSearchParams(params.toString());
+      const qs = buildQueryString(current, patch);
 
-  // Debounce da busca (atualiza URL)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      pushWithPatch({ q: q.trim() || null, page: "1" });
-    }, 350);
+      const nextUrl = qs ? `${pathname}?${qs}` : pathname;
+      const currentUrl = current.toString()
+        ? `${pathname}?${current.toString()}`
+        : pathname;
 
-    return () => clearTimeout(t);
-  }, [q, pushWithPatch]);
+      if (nextUrl === currentUrl) return;
+
+      router.push(nextUrl);
+    },
+    [params, pathname, router],
+  );
+
+  const pushSearch = useDebouncedCallback<[string]>((value) => {
+    const normalized = normalizeText(value);
+    pushWithPatch({ q: normalized || null, page: "1" });
+  }, 350);
+
+  const hasActiveFilters = useMemo(() => {
+    return normalizeText(q).length > 0 || month !== "this-month" || type !== "all";
+  }, [q, month, type]);
+
+  const clearSearch = useCallback(() => {
+    setQ("");
+    pushWithPatch({ q: null, page: "1" });
+  }, [pushWithPatch]);
+
+  const clearAll = useCallback(() => {
+    setQ("");
+    setMonth("this-month");
+    setType("all");
+    pushWithPatch({ q: null, month: "this-month", type: "all", page: "1" });
+  }, [pushWithPatch]);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="relative w-full sm:max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+
         <Input
-          placeholder="Buscar por descrição, categoria, conta..."
+          placeholder="Buscar por título..."
           value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="pl-9"
+          onChange={(e) => {
+            const value = e.target.value;
+            setQ(value);
+            pushSearch(value);
+          }}
+          className="pl-9 pr-9"
+          inputMode="search"
+          aria-label="Buscar transações"
         />
+
+        {normalizeText(q) ? (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40"
+            aria-label="Limpar busca"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
 
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -78,7 +140,7 @@ export function TransactionsFilters({
             pushWithPatch({ month: v, page: "1" });
           }}
         >
-          <SelectTrigger className="w-full sm:w-45">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Mês" />
           </SelectTrigger>
           <SelectContent>
@@ -90,7 +152,7 @@ export function TransactionsFilters({
         <Select
           value={type}
           onValueChange={(v) => {
-            const next = v as "all" | "income" | "expense";
+            const next = v as TxType;
             setType(next);
             pushWithPatch({ type: next, page: "1" });
           }}
@@ -104,6 +166,16 @@ export function TransactionsFilters({
             <SelectItem value="expense">Saídas</SelectItem>
           </SelectContent>
         </Select>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full sm:w-auto"
+          onClick={hasActiveFilters ? clearAll : undefined}
+          disabled={!hasActiveFilters}
+        >
+          Limpar
+        </Button>
       </div>
     </div>
   );

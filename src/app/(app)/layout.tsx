@@ -63,7 +63,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 text-center text-xs text-muted-foreground sm:flex-row sm:text-left">
           <span className="inline-flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-            Finwise • Portfólio
+            Finwise
           </span>
           <span>Next.js • Supabase • shadcn/ui</span>
         </footer>

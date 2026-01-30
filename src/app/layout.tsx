@@ -15,9 +15,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className="bg-background text-foreground">
+      <body className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider>{children}</ThemeProvider>
-        <Toaster richColors />
+
+        <Toaster richColors position="top-right" duration={3500} />
       </body>
     </html>
   );

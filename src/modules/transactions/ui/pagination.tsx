@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -30,14 +30,34 @@ export function TransactionsPagination({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const pushPage = useMemo(() => {
-    return (nextPage: number) => {
-      const qs = buildQueryString(new URLSearchParams(params.toString()), {
-        page: String(nextPage),
+  const baseParams = useMemo(() => new URLSearchParams(params.toString()), [params]);
+
+  const goToPage = useCallback(
+    (nextPage: number) => {
+      const safe = Math.min(totalPages, Math.max(1, nextPage));
+
+      const qs = buildQueryString(new URLSearchParams(baseParams.toString()), {
+        page: String(safe),
       });
-      router.push(`${pathname}?${qs}`);
-    };
-  }, [params, pathname, router]);
+
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [baseParams, pathname, router, totalPages],
+  );
+
+  if (totalPages <= 1) {
+    return (
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Total: <span className="font-medium text-foreground">{total}</span>
+        </div>
+
+        <div className="text-xs text-muted-foreground">
+          Página <span className="font-medium text-foreground">{page}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -47,25 +67,27 @@ export function TransactionsPagination({
 
       <div className="flex items-center justify-between gap-2 sm:justify-end">
         <Button
+          type="button"
           variant="outline"
           size="sm"
           disabled={page <= 1}
-          onClick={() => pushPage(page - 1)}
+          onClick={() => goToPage(page - 1)}
         >
           <ChevronLeft className="mr-1 h-4 w-4" />
           Anterior
         </Button>
 
-        <div className="text-xs text-muted-foreground">
+        <div className="rounded-full border bg-background/50 px-3 py-1 text-xs text-muted-foreground">
           Página <span className="font-medium text-foreground">{page}</span> de{" "}
           <span className="font-medium text-foreground">{totalPages}</span>
         </div>
 
         <Button
+          type="button"
           variant="outline"
           size="sm"
           disabled={page >= totalPages}
-          onClick={() => pushPage(page + 1)}
+          onClick={() => goToPage(page + 1)}
         >
           Próxima
           <ChevronRight className="ml-1 h-4 w-4" />

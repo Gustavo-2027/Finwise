@@ -9,15 +9,24 @@ export function TransactionsActions() {
   const router = useRouter();
 
   return (
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={() => router.push("/import")}>
-        <FileUp className="mr-2 h-4 w-4" />
-        Importar CSV
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => router.push("/import")}
+        className="gap-2"
+      >
+        <FileUp className="h-4 w-4" />
+        <span className="hidden sm:inline">Importar CSV</span>
       </Button>
 
-      <Button size="sm" onClick={() => router.push("/transactions/new")}>
-        <Plus className="mr-2 h-4 w-4" />
-        Nova transação
+      <Button
+        size="sm"
+        onClick={() => router.push("/transactions/new")}
+        className="gap-2 shadow-sm"
+      >
+        <Plus className="h-4 w-4" />
+        <span className="hidden sm:inline">Nova transação</span>
       </Button>
     </div>
   );

@@ -14,48 +14,147 @@ export type Database = {
   };
   public: {
     Tables: {
-      transactions: {
+      accounts: {
         Row: {
-          account: string;
-          amount: number;
-          category: string;
           created_at: string;
-          date: string;
+          currency: string;
           id: string;
-          title: string;
-          type: Database["public"]["Enums"]["transaction_type"];
+          is_archived: boolean;
+          name: string;
+          updated_at: string;
           user_id: string;
         };
         Insert: {
-          account: string;
-          amount: number;
-          category: string;
           created_at?: string;
-          date?: string;
+          currency?: string;
           id?: string;
-          title: string;
-          type: Database["public"]["Enums"]["transaction_type"];
+          is_archived?: boolean;
+          name: string;
+          updated_at?: string;
           user_id: string;
         };
         Update: {
-          account?: string;
-          amount?: number;
-          category?: string;
           created_at?: string;
-          date?: string;
+          currency?: string;
           id?: string;
-          title?: string;
-          type?: Database["public"]["Enums"]["transaction_type"];
+          is_archived?: boolean;
+          name?: string;
+          updated_at?: string;
           user_id?: string;
         };
         Relationships: [];
+      };
+      categories: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_archived: boolean;
+          kind: Database["public"]["Enums"]["transaction_type"];
+          name: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_archived?: boolean;
+          kind: Database["public"]["Enums"]["transaction_type"];
+          name: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_archived?: boolean;
+          kind?: Database["public"]["Enums"]["transaction_type"];
+          name?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      transactions: {
+        Row: {
+          account: string | null;
+          account_id: string;
+          amount: number | null;
+          amount_cents: number;
+          category: string | null;
+          category_id: string;
+          created_at: string;
+          date: string | null;
+          id: string;
+          note: string | null;
+          occurred_at: string;
+          title: string;
+          type: Database["public"]["Enums"]["transaction_type"];
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          account?: string | null;
+          account_id: string;
+          amount?: number | null;
+          amount_cents: number;
+          category?: string | null;
+          category_id: string;
+          created_at?: string;
+          date?: string | null;
+          id?: string;
+          note?: string | null;
+          occurred_at: string;
+          title: string;
+          type: Database["public"]["Enums"]["transaction_type"];
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          account?: string | null;
+          account_id?: string;
+          amount?: number | null;
+          amount_cents?: number;
+          category?: string | null;
+          category_id?: string;
+          created_at?: string;
+          date?: string | null;
+          id?: string;
+          note?: string | null;
+          occurred_at?: string;
+          title?: string;
+          type?: Database["public"]["Enums"]["transaction_type"];
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "transactions_account_id_fkey";
+            columns: ["account_id"];
+            isOneToOne: false;
+            referencedRelation: "accounts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      get_transactions_summary: {
+        Args: { p_end: string; p_q?: string; p_start: string; p_type?: string };
+        Returns: {
+          expense_cents: number;
+          income_cents: number;
+        }[];
+      };
     };
     Enums: {
       transaction_type: "income" | "expense";

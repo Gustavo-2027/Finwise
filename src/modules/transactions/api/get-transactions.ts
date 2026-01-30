@@ -1,132 +1,159 @@
 import { supabaseServer } from "@/infrastructure/supabase/server";
-import type {
-  TransactionRow,
-  TransactionsFilters,
-  TransactionsResult,
-} from "@/modules/transactions/domain/transaction.types";
-import type { Database } from "@/shared/types/database.types";
+import type { TransactionRow } from "@/modules/transactions/types";
 
-/**
- * Tipo da linha vindo do banco (somente colunas usadas na listagem).
- * Evita "cast cego" e mantém o retorno alinhado ao schema real.
- */
-type TransactionRowDB = Pick<
-  Database["public"]["Tables"]["transactions"]["Row"],
-  "id" | "title" | "account" | "category" | "type" | "amount" | "date"
->;
+type TxTypeFilter = "all" | "income" | "expense";
+type MonthFilter = "this-month" | "last-month" | string; // "YYYY-MM"
 
-function clampInt(n: number, min: number, max: number) {
+export type GetTransactionsInput = {
+  q?: string;
+  month?: MonthFilter;
+  type?: TxTypeFilter;
+  page?: number;
+  pageSize?: number;
+};
+
+export type GetTransactionsOk = {
+  ok: true;
+  rangeLabel: string;
+  result: {
+    rows: TransactionRow[];
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type GetTransactionsErr = {
+  ok: false;
+  message: string;
+};
+
+export type GetTransactionsResponse = GetTransactionsOk | GetTransactionsErr;
+
+type TransactionJoinRow = {
+  id: string;
+  title: string;
+  type: "income" | "expense";
+  occurred_at: string;
+  amount_cents: number | string;
+  account: { name: string } | null;
+  category: { name: string } | null;
+};
+
+function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function getMonthRange(month?: string) {
-  const now = new Date();
-
-  function startOfMonth(d: Date) {
-    return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
-  }
-
-  function startOfNextMonth(d: Date) {
-    return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
-  }
-
-  if (!month || month === "this-month") {
-    const start = startOfMonth(now);
-    const end = startOfNextMonth(now);
-    return { start, end, label: "Este mês" };
-  }
-
-  if (month === "last-month") {
-    const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const start = startOfMonth(last);
-    const end = startOfNextMonth(last);
-    return { start, end, label: "Último mês" };
-  }
-
-  if (/^\d{4}-\d{2}$/.test(month)) {
-    const [y, m] = month.split("-").map(Number);
-    const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
-    const end = new Date(y, m, 1, 0, 0, 0, 0);
-    return { start, end, label: month };
-  }
-
-  const start = startOfMonth(now);
-  const end = startOfNextMonth(now);
-  return { start, end, label: "Este mês" };
+function getUtcMonthRangeFromYYYYMM(yyyymm: string) {
+  const [y, m] = yyyymm.split("-").map(Number);
+  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
-export async function getTransactions(filters: TransactionsFilters) {
-  const supabase = await supabaseServer();
-  const { data: authData } = await supabase.auth.getUser();
+function getThisMonthUtcRange() {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const start = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m + 1, 1, 0, 0, 0));
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
 
-  const user = authData.user;
-  if (!user) {
-    return { ok: false as const, message: "Sessão inválida." };
+function getLastMonthUtcRange() {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
+
+function formatRangeLabel(month: MonthFilter | undefined) {
+  if (!month || month === "this-month") return "Este mês";
+  if (month === "last-month") return "Último mês";
+  return month;
+}
+
+function mapRowToTransaction(r: TransactionJoinRow): TransactionRow {
+  if (!r.id) {
+    throw new Error("getTransactions: row sem id (verifique select/joins).");
   }
 
-  const q = (filters.q ?? "").trim();
-  const type = filters.type ?? "all";
-  const month = filters.month ?? "this-month";
+  return {
+    id: r.id,
+    title: r.title,
+    type: r.type,
+    occurredAt: r.occurred_at,
+    amountCents: Number(r.amount_cents),
+    categoryName: r.category?.name ?? "-",
+    accountName: r.account?.name ?? "-",
+  };
+}
 
-  const pageSize = clampInt(filters.pageSize ?? 10, 5, 50);
-  const page = clampInt(filters.page ?? 1, 1, 999);
+export async function getTransactions(
+  input: GetTransactionsInput,
+): Promise<GetTransactionsResponse> {
+  const supabase = await supabaseServer();
 
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const user = authData?.user;
+
+  if (authError || !user) {
+    return { ok: false, message: "Sessão inválida. Faça login novamente." };
+  }
+
+  const q = (input.q ?? "").trim();
+  const type = input.type ?? "all";
+  const month = input.month ?? "this-month";
+
+  const pageSize = clamp(input.pageSize ?? 10, 5, 50);
+  const page = clamp(input.page ?? 1, 1, 999);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const range = getMonthRange(month);
+  const range =
+    month === "this-month"
+      ? getThisMonthUtcRange()
+      : month === "last-month"
+        ? getLastMonthUtcRange()
+        : getUtcMonthRangeFromYYYYMM(month);
 
-  // Base query (SSR) com paginação
   let query = supabase
     .from("transactions")
-    .select("id,title,account,category,type,amount,date", { count: "exact" })
+    .select(
+      `
+        id,
+        title,
+        type,
+        occurred_at,
+        amount_cents,
+        account:accounts ( name ),
+        category:categories ( name )
+      `,
+      { count: "exact" },
+    )
     .eq("user_id", user.id)
-    .gte("date", range.start.toISOString())
-    .lt("date", range.end.toISOString())
-    .order("date", { ascending: false })
+    .gte("occurred_at", range.startISO)
+    .lt("occurred_at", range.endISO);
+
+  if (type !== "all") query = query.eq("type", type);
+  if (q) query = query.ilike("title", `%${q}%`);
+
+  const { data, error, count } = await query
+    .order("occurred_at", { ascending: false })
     .range(from, to);
 
-  if (type !== "all") {
-    query = query.eq("type", type);
-  }
-
-  if (q) {
-    // Evita quebrar o "or" se o usuário digitar vírgula
-    const escaped = q.replaceAll(",", " ");
-    query = query.or(
-      `title.ilike.%${escaped}%,category.ilike.%${escaped}%,account.ilike.%${escaped}%`,
-    );
-  }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    return { ok: false as const, message: error.message };
-  }
-
-  const dbRows: TransactionRowDB[] = (data ?? []) as TransactionRowDB[];
-
-  // Normaliza para o type do domínio (mantém o app desacoplado do DB)
-  const rows: TransactionRow[] = dbRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    account: row.account,
-    category: row.category,
-    type: row.type,
-    amount: typeof row.amount === "string" ? Number(row.amount) : (row.amount as number),
-    date: row.date,
-  }));
+  if (error) return { ok: false, message: error.message };
 
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const result: TransactionsResult = {
-    rows,
-    total,
-    totalPages,
-    page,
-    pageSize,
-  };
+  const typed = (data ?? []) as TransactionJoinRow[];
+  const rows: TransactionRow[] = typed.map(mapRowToTransaction);
 
-  return { ok: true as const, result, rangeLabel: range.label };
+  return {
+    ok: true,
+    rangeLabel: formatRangeLabel(month),
+    result: { rows, total, totalPages },
+  };
 }
