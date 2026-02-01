@@ -14,9 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getTransactions } from "@/modules/transactions/api/get-transactions";
 import { getTransactionsSummary } from "@/modules/transactions/api/get-transactions-summary";
-import { EmptyState } from "@/shared/ui/empty-state/page";
-import { PageHeader } from "@/shared/ui/page-header/page";
-import { Skeleton } from "@/shared/ui/skeleton/page";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { PageHeader } from "@/shared/ui/page-header";
+import { Skeleton } from "@/shared/ui/skeleton";
 
 function formatBRLFromCents(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -26,7 +26,7 @@ function formatBRLFromCents(cents: number) {
 }
 
 function formatMoneyFromCents(cents: number, type: "income" | "expense") {
-  const formatted = formatBRLFromCents(cents);
+  const formatted = formatBRLFromCents(Math.abs(cents));
   return type === "expense" ? `- ${formatted}` : formatted;
 }
 
@@ -70,7 +70,13 @@ function StatCard({
   tone?: "neutral" | "success" | "danger";
 }) {
   return (
-    <Card className="bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
+    <Card
+      className={cn(
+        "relative overflow-hidden bg-card/70 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/55",
+        "transition hover:-translate-y-0.5 hover:shadow-md",
+        "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+      )}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -90,8 +96,9 @@ function StatCard({
               "grid h-9 w-9 place-items-center rounded-xl border bg-background/60",
               tone === "success" && "text-emerald-600 dark:text-emerald-400",
               tone === "danger" && "text-rose-600 dark:text-rose-400",
-              !tone || tone === "neutral" ? "text-muted-foreground" : "",
+              (!tone || tone === "neutral") && "text-muted-foreground",
             )}
+            aria-hidden="true"
           >
             {icon}
           </div>
@@ -115,6 +122,8 @@ function StatCard({
 
         {helper ? <p className="text-xs text-muted-foreground">{helper}</p> : null}
       </CardContent>
+
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50" />
     </Card>
   );
 }
@@ -135,13 +144,14 @@ function QuickAction({
       asChild
       variant="ghost"
       className={cn(
-        "h-auto w-full justify-between rounded-xl border bg-background/40 px-3 py-3 text-left",
-        "hover:bg-muted/40",
+        "h-auto w-full justify-between rounded-2xl border bg-background/40 px-3 py-3 text-left",
+        "transition hover:-translate-y-0.5 hover:bg-muted/40 hover:shadow-sm",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
     >
       <Link href={href} className="group flex w-full items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl border bg-background/60 text-muted-foreground">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl border bg-background/60 text-muted-foreground">
             {icon}
           </div>
 
@@ -199,7 +209,7 @@ export default async function DashboardPage() {
         <StatCard
           title="Saldo do mês"
           value={formatBRLFromCents(netCents)}
-          helper="Entradas − Saídas"
+          helper="Entradas − Saídas (efetivadas)"
           badge="Este mês"
           loading={isLoading}
           tone={netCents > 0 ? "success" : netCents < 0 ? "danger" : "neutral"}
@@ -209,7 +219,7 @@ export default async function DashboardPage() {
         <StatCard
           title="Entradas"
           value={formatBRLFromCents(incomeCents)}
-          helper="Somatório de receitas"
+          helper="Receitas efetivadas no período"
           badge="Este mês"
           loading={isLoading}
           tone="success"
@@ -219,7 +229,7 @@ export default async function DashboardPage() {
         <StatCard
           title="Saídas"
           value={formatBRLFromCents(expenseCents)}
-          helper="Somatório de despesas"
+          helper="Despesas efetivadas no período"
           badge="Este mês"
           loading={isLoading}
           tone="danger"
@@ -228,13 +238,13 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
+        <Card className="lg:col-span-2 bg-card/70 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/55">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
                 <CardTitle className="text-base">Últimas transações</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Acompanhe suas movimentações recentes
+                  Um recorte rápido do que aconteceu este mês
                 </p>
               </div>
 
@@ -252,38 +262,47 @@ export default async function DashboardPage() {
                 <Skeleton className="h-12 w-full" />
               </div>
             ) : hasTransactions && latest.ok ? (
-              <div className="divide-y rounded-xl border bg-background/40">
-                {latest.result.rows.map((t) => (
-                  <Link
-                    key={t.id}
-                    href={`/transactions/${t.id}/edit`}
-                    className="block px-4 py-3 transition-colors hover:bg-muted/20"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="truncate text-sm font-medium">{t.title}</div>
-                          <TypePill type={t.type} />
+              <div className="overflow-hidden rounded-2xl border bg-background/40">
+                <div className="divide-y">
+                  {latest.result.rows.map((t) => (
+                    <Link
+                      key={t.id}
+                      href={`/transactions/${t.id}/edit`}
+                      className={cn(
+                        "block px-4 py-3 transition-colors hover:bg-muted/20",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="truncate text-sm font-medium">{t.title}</div>
+                            <TypePill type={t.type} />
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            <span>{formatDate(t.occurredAt)}</span>
+                            <span className="mx-2 text-muted-foreground/60">•</span>
+                            <span className="truncate">{t.categoryName}</span>
+                            <span className="mx-2 text-muted-foreground/60">•</span>
+                            <span className="truncate">{t.accountName}</span>
+                          </div>
                         </div>
 
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {formatDate(t.occurredAt)} • {t.categoryName} • {t.accountName}
+                        <div
+                          className={cn(
+                            "shrink-0 text-sm font-semibold tabular-nums",
+                            t.type === "income"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-foreground",
+                          )}
+                        >
+                          {formatMoneyFromCents(t.amountCents, t.type)}
                         </div>
                       </div>
-
-                      <div
-                        className={cn(
-                          "shrink-0 text-sm font-semibold tabular-nums",
-                          t.type === "income"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-foreground",
-                        )}
-                      >
-                        {formatMoneyFromCents(t.amountCents, t.type)}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
+                </div>
               </div>
             ) : (
               <EmptyState
@@ -312,12 +331,12 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/55 shadow-sm">
+        <Card className="bg-card/70 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/55">
           <CardHeader className="pb-3">
             <div className="space-y-1">
               <CardTitle className="text-base">Ações rápidas</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Atalhos para configurar seu Finwise
+                Configure o Valette em poucos cliques
               </p>
             </div>
           </CardHeader>
@@ -325,7 +344,7 @@ export default async function DashboardPage() {
           <CardContent className="grid gap-2">
             <QuickAction
               title="Adicionar conta"
-              description="Crie uma conta para organizar entradas e saídas"
+              description="Organize suas fontes e despesas"
               icon={<CreditCard className="h-4 w-4" />}
               href="/accounts"
             />
@@ -339,7 +358,7 @@ export default async function DashboardPage() {
 
             <QuickAction
               title="Importar CSV"
-              description="Traga dados do banco em poucos cliques"
+              description="Traga dados do banco rapidamente"
               icon={<FileUp className="h-4 w-4" />}
               href="/import"
             />

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { supabaseServer } from "@/infrastructure/supabase/server";
-import { AppHeader } from "@/shared/ui/app-header/page";
+import { AppHeader } from "@/shared/ui/app-header/";
 
 /**
  * Layout do grupo (app).
@@ -37,7 +37,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <div className="border-b bg-background/40 px-4 py-3 sm:px-6">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium leading-none">Finwise</p>
+                  <p className="text-sm font-medium leading-none">Valette</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {userEmail ? `Sessão: ${userEmail}` : "Sessão ativa"}
                   </p>
@@ -63,7 +63,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <footer className="mt-6 flex flex-col items-center justify-between gap-2 text-center text-xs text-muted-foreground sm:flex-row sm:text-left">
           <span className="inline-flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-            Finwise
+            Valette
           </span>
           <span>Next.js • Supabase • shadcn/ui</span>
         </footer>

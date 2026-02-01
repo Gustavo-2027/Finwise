@@ -1,163 +1,117 @@
-import { Receipt } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
+import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { getTransactions } from "@/modules/transactions/api/get-transactions";
-import { TransactionsActions } from "@/modules/transactions/ui/actions";
-import { TransactionsFilters } from "@/modules/transactions/ui/filters";
-import { TransactionsPagination } from "@/modules/transactions/ui/pagination";
-import { TransactionsTable } from "@/modules/transactions/ui/table";
-import { EmptyState } from "@/shared/ui/empty-state/page";
-import { PageHeader } from "@/shared/ui/page-header/page";
+import { createTransactionAction } from "@/modules/transactions/actions/create-transaction";
+import { getTransactionFormOptions } from "@/modules/transactions/api/get-form-options";
+import { TransactionForm } from "@/modules/transactions/ui/transaction-form";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { PageHeader } from "@/shared/ui/page-header";
 
-function clampInt(value: unknown, fallback: number, min: number, max: number) {
-  const n = typeof value === "string" ? Number.parseInt(value, 10) : NaN;
-  if (Number.isNaN(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
+export default async function NewTransactionPage() {
+  const { accounts, categories } = await getTransactionFormOptions();
 
-export default async function TransactionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    q?: string;
-    month?: string;
-    type?: "all" | "income" | "expense";
-    page?: string;
-  }>;
-}) {
-  const sp = await searchParams;
-
-  const q = (sp.q ?? "").trim();
-  const month = sp.month ?? "this-month";
-  const type = sp.type ?? "all";
-  const page = clampInt(sp.page, 1, 1, 999);
-
-  const actions = <TransactionsActions />;
-
-  const result = await getTransactions({
-    q,
-    month,
-    type,
-    page,
-    pageSize: 10,
-  });
-
-  if (!result.ok) {
-    const isSessionError = result.message.toLowerCase().includes("sessão");
-
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Transações"
-          description={
-            isSessionError
-              ? "Faça login para continuar."
-              : "Ocorreu um erro ao carregar suas transações."
-          }
-          actions={actions}
-        />
-
-        <EmptyState
-          icon={<Receipt className="h-5 w-5 text-muted-foreground" />}
-          title={isSessionError ? "Sessão inválida" : "Não foi possível carregar"}
-          description={result.message}
-          actions={actions}
-        />
-      </div>
-    );
-  }
-
-  const { rows, total, totalPages } = result.result;
-  const periodLabel = result.rangeLabel;
-  const hasRows = rows.length > 0;
-
-  const pageSize = 10;
-  const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const showingTo = Math.min(page * pageSize, total);
+  const missingAccounts = accounts.length === 0;
+  const missingCategories = categories.length === 0;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Transações"
-        description={`Período: ${periodLabel}`}
-        actions={actions}
+        title="Nova transação"
+        description="Registre uma entrada ou saída para atualizar seu dashboard."
+        actions={
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <Link href="/transactions">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Voltar</span>
+            </Link>
+          </Button>
+        }
       />
 
-      <Card className="overflow-hidden bg-card/70 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/55">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-base">Transações</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Visualize, filtre e edite suas movimentações.
-              </p>
+      {missingAccounts ? (
+        <EmptyState
+          title="Crie sua primeira conta"
+          description="Contas representam onde o dinheiro entra e sai (ex: Nubank, Carteira, Banco)."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" className="gap-2">
+                <Link href="/accounts/new">Criar conta</Link>
+              </Button>
+
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link href="/accounts">Ver contas</Link>
+              </Button>
             </div>
+          }
+        />
+      ) : missingCategories ? (
+        <EmptyState
+          title="Crie suas categorias"
+          description="Categorias deixam seus relatórios e gráficos muito mais úteis."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" className="gap-2">
+                <Link href="/categories/new">Criar categoria</Link>
+              </Button>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full border bg-background/50 px-2 py-1 text-muted-foreground">
-                Total <span className="font-medium text-foreground">{total}</span>
-              </span>
-              <span className="rounded-full border bg-background/50 px-2 py-1 text-muted-foreground">
-                Página <span className="font-medium text-foreground">{page}</span>/
-                <span className="font-medium text-foreground">{totalPages}</span>
-              </span>
-              <span className="rounded-full border bg-background/50 px-2 py-1 text-muted-foreground">
-                Exibindo{" "}
-                <span className="font-medium text-foreground">{showingFrom}</span>–
-                <span className="font-medium text-foreground">{showingTo}</span>
-              </span>
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link href="/categories">Ver categorias</Link>
+              </Button>
             </div>
-          </div>
-        </CardHeader>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <Card className="overflow-hidden bg-muted/20 shadow-sm">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg border bg-background/50 p-2">
+                  <Sparkles className="h-4 w-4 text-muted-foreground" />
+                </div>
 
-        <Separator />
-
-        <CardContent className="space-y-5 p-0">
-          <div className="space-y-4 px-4 pt-5 sm:px-6">
-            <div>
-              <div className="text-sm font-medium">Filtros</div>
-              <div className="text-xs text-muted-foreground">
-                Busque por título e refine por mês e tipo.
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Dica rápida</div>
+                  <p className="text-sm text-muted-foreground">
+                    Categorias e contas bem definidas deixam o dashboard mais preciso e os
+                    gráficos mais úteis.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <TransactionsFilters
-              key={`${q}|${month}|${type}`}
-              initialQuery={q}
-              initialMonth={month}
-              initialType={type}
-            />
-          </div>
-
-          <Separator />
-
-          <div className="px-4 pb-5 sm:px-6">
-            {hasRows ? (
-              <div className="space-y-4">
-                <TransactionsTable rows={rows} />
-
-                <Separator />
-
-                <TransactionsPagination
-                  page={page}
-                  totalPages={totalPages}
-                  total={total}
-                />
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="outline" className="gap-2">
+                  <Link href="/categories">Gerenciar categorias</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="gap-2">
+                  <Link href="/accounts">Gerenciar contas</Link>
+                </Button>
               </div>
-            ) : (
-              <div className="rounded-xl border bg-muted/20 p-4">
-                <EmptyState
-                  icon={<Receipt className="h-5 w-5 text-muted-foreground" />}
-                  title="Nenhuma transação encontrada"
-                  description="Ajuste os filtros ou crie sua primeira transação."
-                  actions={actions}
-                />
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden bg-card/70 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/55">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Detalhes</CardTitle>
+            </CardHeader>
+
+            <Separator />
+
+            <CardContent className="pt-6">
+              <TransactionForm
+                mode="create"
+                action={createTransactionAction}
+                submitLabel="Salvar transação"
+                cancelHref="/transactions"
+                accounts={accounts}
+                categories={categories}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

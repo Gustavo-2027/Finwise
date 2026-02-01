@@ -13,18 +13,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-type TxType = "all" | "income" | "expense";
-type MonthFilter = "this-month" | "last-month" | string;
+import type {
+  MonthFilter,
+  TxStatusFilter,
+  TxTypeFilter,
+} from "@/modules/transactions/types";
 
 function buildQueryString(params: URLSearchParams, patch: Record<string, string | null>) {
   const next = new URLSearchParams(params);
-
   for (const [key, value] of Object.entries(patch)) {
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
   }
-
   return next.toString();
 }
 
@@ -47,14 +47,47 @@ function useDebouncedCallback<Args extends unknown[]>(
   );
 }
 
+function monthLabel(yyyymm: string) {
+  const [y, m] = yyyymm.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1, 12, 0, 0));
+  return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function monthKeyFromOffset(offset: number) {
+  const now = new Date();
+  const d = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1, 12, 0, 0),
+  );
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+
+function buildMonthsAround(pastCount: number, futureCount: number) {
+  const past: string[] = [];
+  const future: string[] = [];
+
+  // passado começa em 2: evita duplicar last-month
+  for (let i = 2; i < 2 + pastCount; i++) past.push(monthKeyFromOffset(-i));
+
+  // futuro começa em 2: evita duplicar next-month
+  for (let i = 2; i < 2 + futureCount; i++) future.push(monthKeyFromOffset(i));
+
+  return { past, future };
+}
+
 export function TransactionsFilters({
   initialQuery,
   initialMonth,
   initialType,
+  initialStatus,
 }: {
   initialQuery: string;
   initialMonth: MonthFilter;
-  initialType: TxType;
+  initialType: TxTypeFilter;
+  initialStatus: TxStatusFilter;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -62,7 +95,13 @@ export function TransactionsFilters({
 
   const [q, setQ] = useState(initialQuery);
   const [month, setMonth] = useState<MonthFilter>(initialMonth);
-  const [type, setType] = useState<TxType>(initialType);
+  const [type, setType] = useState<TxTypeFilter>(initialType);
+  const [status, setStatus] = useState<TxStatusFilter>(initialStatus);
+
+  const { past: pastMonths, future: futureMonths } = useMemo(
+    () => buildMonthsAround(12, 12),
+    [],
+  );
 
   const pushWithPatch = useCallback(
     (patch: Record<string, string | null>) => {
@@ -75,7 +114,6 @@ export function TransactionsFilters({
         : pathname;
 
       if (nextUrl === currentUrl) return;
-
       router.push(nextUrl);
     },
     [params, pathname, router],
@@ -87,8 +125,13 @@ export function TransactionsFilters({
   }, 350);
 
   const hasActiveFilters = useMemo(() => {
-    return normalizeText(q).length > 0 || month !== "this-month" || type !== "all";
-  }, [q, month, type]);
+    return (
+      normalizeText(q).length > 0 ||
+      month !== "this-month" ||
+      type !== "all" ||
+      status !== "all"
+    );
+  }, [q, month, type, status]);
 
   const clearSearch = useCallback(() => {
     setQ("");
@@ -99,7 +142,14 @@ export function TransactionsFilters({
     setQ("");
     setMonth("this-month");
     setType("all");
-    pushWithPatch({ q: null, month: "this-month", type: "all", page: "1" });
+    setStatus("all");
+    pushWithPatch({
+      q: null,
+      month: "this-month",
+      type: "all",
+      status: "all",
+      page: "1",
+    });
   }, [pushWithPatch]);
 
   return (
@@ -133,26 +183,57 @@ export function TransactionsFilters({
       </div>
 
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        {/* Month */}
         <Select
           value={month}
           onValueChange={(v) => {
-            setMonth(v);
-            pushWithPatch({ month: v, page: "1" });
+            const next = v as MonthFilter;
+            setMonth(next);
+            pushWithPatch({ month: next, page: "1" });
           }}
         >
-          <SelectTrigger className="w-full sm:w-44">
+          <SelectTrigger className="w-full sm:w-56">
             <SelectValue placeholder="Mês" />
           </SelectTrigger>
+
           <SelectContent>
             <SelectItem value="this-month">Este mês</SelectItem>
             <SelectItem value="last-month">Último mês</SelectItem>
+            <SelectItem value="next-month">Próximo mês</SelectItem>
+
+            {futureMonths.length ? (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Próximos meses
+                </div>
+                {futureMonths.map((m) => (
+                  <SelectItem key={`f-${m}`} value={m}>
+                    {monthLabel(m)}
+                  </SelectItem>
+                ))}
+              </>
+            ) : null}
+
+            {pastMonths.length ? (
+              <>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Meses anteriores
+                </div>
+                {pastMonths.map((m) => (
+                  <SelectItem key={`p-${m}`} value={m}>
+                    {monthLabel(m)}
+                  </SelectItem>
+                ))}
+              </>
+            ) : null}
           </SelectContent>
         </Select>
 
+        {/* Type */}
         <Select
           value={type}
           onValueChange={(v) => {
-            const next = v as TxType;
+            const next = v as TxTypeFilter;
             setType(next);
             pushWithPatch({ type: next, page: "1" });
           }}
@@ -167,11 +248,30 @@ export function TransactionsFilters({
           </SelectContent>
         </Select>
 
+        {/* Status */}
+        <Select
+          value={status}
+          onValueChange={(v) => {
+            const next = v as TxStatusFilter;
+            setStatus(next);
+            pushWithPatch({ status: next, page: "1" });
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="posted">Efetivadas</SelectItem>
+            <SelectItem value="scheduled">Agendadas</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Button
           type="button"
           variant="outline"
           className="w-full sm:w-auto"
-          onClick={hasActiveFilters ? clearAll : undefined}
+          onClick={clearAll}
           disabled={!hasActiveFilters}
         >
           Limpar

@@ -6,10 +6,6 @@ import { z } from "zod";
 import { supabaseServer } from "@/infrastructure/supabase/server";
 import { setFlashToast } from "@/shared/flash/flash-toast";
 
-/**
- * Zod v4: z.literal não aceita `errorMap` do jeito que você tentou.
- * Solução simples e clara: usa `z.enum(["on"])` com message.
- */
 const deleteSchema = z.object({
   id: z.string().uuid(),
   confirm: z.enum(["on"], { message: "Confirme para excluir." }),

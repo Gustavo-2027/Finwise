@@ -80,7 +80,7 @@ export function RegisterForm() {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Criar conta</CardTitle>
-        <CardDescription>Comece a usar o Finwise</CardDescription>
+        <CardDescription>Comece a usar o Valette</CardDescription>
       </CardHeader>
 
       <CardContent>

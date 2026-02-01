@@ -3,34 +3,43 @@
 import { redirect } from "next/navigation";
 
 import { supabaseServer } from "@/infrastructure/supabase/server";
+import { getEnabledRulesForCurrentUser } from "@/modules/rules/api/get-enabled-rules";
+import { applyRulesToTransaction } from "@/modules/rules/domain/apply-rules-to-transaction";
 import { setFlashToast } from "@/shared/flash/flash-toast";
+import type { Database } from "@/shared/types/database.types";
 
 import { createTransactionSchema } from "../schemas/transaction-form.schema";
 
-/**
- * Extrai e normaliza os dados vindos do <form>.
- * Obs: a conversão de amount (vírgula/milhar) deve estar no Zod schema.
- */
+type TransactionInsert = Database["public"]["Tables"]["transactions"]["Insert"];
+
 function parseFormData(formData: FormData) {
   return {
     title: String(formData.get("title") ?? ""),
     amount: String(formData.get("amount") ?? ""),
     type: String(formData.get("type") ?? "expense"),
+    status: String(formData.get("status") ?? "posted"),
     accountId: String(formData.get("accountId") ?? ""),
-    categoryId: String(formData.get("categoryId") ?? ""),
-    date: String(formData.get("date") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? ""), // "" = inbox
+    date: String(formData.get("date") ?? ""), // YYYY-MM-DD
     note: String(formData.get("note") ?? ""),
   };
 }
 
 function toCents(amount: number) {
-  // Evita bugs de float (ex: 0.1 + 0.2)
   return Math.round(amount * 100);
 }
 
-function dateToIso(date: string) {
-  // yyyy-mm-dd -> UTC meia-noite (determinístico)
-  return new Date(`${date}T00:00:00.000Z`).toISOString();
+/**
+ * Usar 12:00Z evita “voltar um dia” em -03.
+ * Padrão seguro para campos date.
+ */
+function dateToIso(dateYYYYMMDD: string) {
+  return new Date(`${dateYYYYMMDD}T12:00:00.000Z`).toISOString();
+}
+
+function toNullIfEmpty(value: unknown) {
+  const v = String(value ?? "").trim();
+  return v.length > 0 ? v : null;
 }
 
 export async function createTransactionAction(formData: FormData) {
@@ -47,11 +56,9 @@ export async function createTransactionAction(formData: FormData) {
   }
 
   const supabase = await supabaseServer();
-
   const { data: auth, error: authError } = await supabase.auth.getUser();
-  const user = auth?.user;
 
-  if (authError || !user) {
+  if (authError || !auth.user) {
     await setFlashToast({
       type: "error",
       title: "Sessão inválida",
@@ -60,27 +67,73 @@ export async function createTransactionAction(formData: FormData) {
     redirect("/login");
   }
 
+  const userId = auth.user.id;
   const input = parsed.data;
 
-  const note = input.note?.trim();
-  const occurredAt = dateToIso(input.date);
+  const accountId = toNullIfEmpty(input.accountId);
+  if (!accountId) {
+    await setFlashToast({
+      type: "error",
+      title: "Conta obrigatória",
+      description: "Selecione uma conta para registrar a transação.",
+    });
+    redirect("/transactions/new");
+  }
+
+  const occurredAt = dateToIso(String(input.date).trim());
+  if (Number.isNaN(Date.parse(occurredAt))) {
+    await setFlashToast({
+      type: "error",
+      title: "Data inválida",
+      description: "Informe uma data válida.",
+    });
+    redirect("/transactions/new");
+  }
+
   const amountCents = toCents(input.amount);
+  const note = input.note?.trim() ? input.note.trim() : null;
 
-  const { error } = await supabase.from("transactions").insert({
-    user_id: user.id,
+  // "" -> null
+  const categoryIdManual = toNullIfEmpty(input.categoryId);
 
+  let finalCategoryId: string | null = categoryIdManual;
+
+  // Só aplica regras se usuário não escolheu categoria manualmente.
+  if (!finalCategoryId) {
+    try {
+      const rules = await getEnabledRulesForCurrentUser();
+      const ruleResult = applyRulesToTransaction(
+        {
+          description: input.title,
+          type: input.type,
+          accountId,
+          categoryId: null,
+        },
+        rules,
+      );
+
+      finalCategoryId = ruleResult.categoryId ?? null;
+    } catch {
+      finalCategoryId = null;
+    }
+  }
+
+  const payload: TransactionInsert = {
+    user_id: userId,
     title: input.title,
     type: input.type,
+    status: input.status,
 
-    account_id: input.accountId,
-    category_id: input.categoryId,
+    account_id: accountId,
+    category_id: finalCategoryId,
 
     occurred_at: occurredAt,
     amount_cents: amountCents,
 
-    note: note ? note : null,
-  });
+    note,
+  };
 
+  const { error } = await supabase.from("transactions").insert(payload);
   if (error) {
     await setFlashToast({
       type: "error",
@@ -96,5 +149,7 @@ export async function createTransactionAction(formData: FormData) {
     description: "Sua transação foi adicionada com sucesso.",
   });
 
-  redirect("/transactions");
+  // Evita usuário “preso” em status anterior.
+  const yyyymm = input.date.slice(0, 7);
+  redirect(`/transactions?month=${yyyymm}&status=all`);
 }

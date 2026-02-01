@@ -26,7 +26,7 @@ export function Breadcrumbs() {
   const parts = pathname.split("/").filter(Boolean);
 
   // Sempre começa no dashboard
-  const crumbs = [{ href: "/dashboard", label: "Finwise" }];
+  const crumbs = [{ href: "/dashboard", label: "Valette" }];
 
   let acc = "";
   for (const part of parts) {

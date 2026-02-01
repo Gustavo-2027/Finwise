@@ -74,53 +74,104 @@ export type Database = {
         };
         Relationships: [];
       };
+      rules: {
+        Row: {
+          account_id: string | null;
+          apply_type: Database["public"]["Enums"]["rule_apply_type"];
+          category_id: string | null;
+          created_at: string;
+          id: string;
+          is_enabled: boolean;
+          match_type: Database["public"]["Enums"]["rule_match_type"];
+          name: string | null;
+          pattern: string;
+          priority: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          account_id?: string | null;
+          apply_type?: Database["public"]["Enums"]["rule_apply_type"];
+          category_id?: string | null;
+          created_at?: string;
+          id?: string;
+          is_enabled?: boolean;
+          match_type: Database["public"]["Enums"]["rule_match_type"];
+          name?: string | null;
+          pattern: string;
+          priority?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          account_id?: string | null;
+          apply_type?: Database["public"]["Enums"]["rule_apply_type"];
+          category_id?: string | null;
+          created_at?: string;
+          id?: string;
+          is_enabled?: boolean;
+          match_type?: Database["public"]["Enums"]["rule_match_type"];
+          name?: string | null;
+          pattern?: string;
+          priority?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rules_account_id_user_id_fkey";
+            columns: ["account_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "accounts";
+            referencedColumns: ["id", "user_id"];
+          },
+          {
+            foreignKeyName: "rules_category_id_user_id_fkey";
+            columns: ["category_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "categories";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
       transactions: {
         Row: {
-          account: string | null;
           account_id: string;
-          amount: number | null;
           amount_cents: number;
-          category: string | null;
-          category_id: string;
+          category_id: string | null;
           created_at: string;
-          date: string | null;
           id: string;
           note: string | null;
           occurred_at: string;
+          status: Database["public"]["Enums"]["transaction_status"];
           title: string;
           type: Database["public"]["Enums"]["transaction_type"];
           updated_at: string;
           user_id: string;
         };
         Insert: {
-          account?: string | null;
           account_id: string;
-          amount?: number | null;
           amount_cents: number;
-          category?: string | null;
-          category_id: string;
+          category_id?: string | null;
           created_at?: string;
-          date?: string | null;
           id?: string;
           note?: string | null;
           occurred_at: string;
+          status?: Database["public"]["Enums"]["transaction_status"];
           title: string;
           type: Database["public"]["Enums"]["transaction_type"];
           updated_at?: string;
           user_id: string;
         };
         Update: {
-          account?: string | null;
           account_id?: string;
-          amount?: number | null;
           amount_cents?: number;
-          category?: string | null;
-          category_id?: string;
+          category_id?: string | null;
           created_at?: string;
-          date?: string | null;
           id?: string;
           note?: string | null;
           occurred_at?: string;
+          status?: Database["public"]["Enums"]["transaction_status"];
           title?: string;
           type?: Database["public"]["Enums"]["transaction_type"];
           updated_at?: string;
@@ -128,18 +179,18 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "transactions_account_id_fkey";
-            columns: ["account_id"];
+            foreignKeyName: "transactions_account_id_user_id_fkey";
+            columns: ["account_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "accounts";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "user_id"];
           },
           {
-            foreignKeyName: "transactions_category_id_fkey";
-            columns: ["category_id"];
+            foreignKeyName: "transactions_category_id_user_id_fkey";
+            columns: ["category_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "categories";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "user_id"];
           },
         ];
       };
@@ -149,14 +200,29 @@ export type Database = {
     };
     Functions: {
       get_transactions_summary: {
-        Args: { p_end: string; p_q?: string; p_start: string; p_type?: string };
+        Args: {
+          p_end: string;
+          p_q?: string;
+          p_start: string;
+          p_status?: string;
+          p_type?: string;
+        };
         Returns: {
           expense_cents: number;
           income_cents: number;
+          net_cents: number;
+          scheduled_expense_cents: number;
+          scheduled_income_cents: number;
+          scheduled_net_cents: number;
         }[];
       };
+      show_limit: { Args: never; Returns: number };
+      show_trgm: { Args: { "": string }; Returns: string[] };
     };
     Enums: {
+      rule_apply_type: "all" | "income" | "expense";
+      rule_match_type: "contains" | "regex" | "starts_with" | "ends_with" | "equals";
+      transaction_status: "posted" | "scheduled";
       transaction_type: "income" | "expense";
     };
     CompositeTypes: {
@@ -285,6 +351,9 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      rule_apply_type: ["all", "income", "expense"],
+      rule_match_type: ["contains", "regex", "starts_with", "ends_with", "equals"],
+      transaction_status: ["posted", "scheduled"],
       transaction_type: ["income", "expense"],
     },
   },

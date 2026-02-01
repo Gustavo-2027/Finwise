@@ -4,7 +4,7 @@ export type FlashToast =
   | { type: "success"; title: string; description?: string }
   | { type: "error"; title: string; description?: string };
 
-const COOKIE_NAME = "finwise_flash_toast";
+const COOKIE_NAME = "valette_flash_toast";
 
 export async function setFlashToast(toast: FlashToast) {
   const cookieStore = await cookies();

@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 function buildQueryString(params: URLSearchParams, patch: Record<string, string | null>) {
   const next = new URLSearchParams(params);
 
-  Object.entries(patch).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(patch)) {
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
-  });
+  }
 
   return next.toString();
 }
@@ -30,6 +30,7 @@ export function TransactionsPagination({
   const pathname = usePathname();
   const params = useSearchParams();
 
+  // snapshot estável do params atual (mantém month/q/type/etc)
   const baseParams = useMemo(() => new URLSearchParams(params.toString()), [params]);
 
   const goToPage = useCallback(
@@ -37,7 +38,7 @@ export function TransactionsPagination({
       const safe = Math.min(totalPages, Math.max(1, nextPage));
 
       const qs = buildQueryString(new URLSearchParams(baseParams.toString()), {
-        page: String(safe),
+        page: safe === 1 ? null : String(safe), // ✅ se página 1, remove do URL
       });
 
       router.push(qs ? `${pathname}?${qs}` : pathname);

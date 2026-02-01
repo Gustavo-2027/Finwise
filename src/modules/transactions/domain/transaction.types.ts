@@ -2,28 +2,21 @@ import type { Database } from "@/shared/types/database.types";
 
 export type TransactionType = Database["public"]["Enums"]["transaction_type"];
 
-export interface TransactionRow {
+export type Transaction = {
   id: string;
+  userId: string;
+
   title: string;
-  account: string;
-  category: string;
   type: TransactionType;
-  amount: number;
-  date: string;
-}
 
-export interface TransactionsFilters {
-  q?: string;
-  month?: string;
-  type?: "all" | TransactionType;
-  page?: number;
-  pageSize?: number;
-}
+  occurredAt: string;
+  amountCents: number;
 
-export interface TransactionsResult {
-  rows: TransactionRow[];
-  total: number;
-  totalPages: number;
-  page: number;
-  pageSize: number;
-}
+  accountId: string | null;
+  categoryId: string | null;
+
+  note: string | null;
+
+  createdAt: string;
+  updatedAt: string | null;
+};

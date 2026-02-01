@@ -9,7 +9,7 @@ export default function LoginPage({
   return (
     <AuthShell
       title="Entrar"
-      description="Acesse sua conta do Finwise"
+      description="Acesse sua conta do Valette"
       footerText="Não tem conta?"
       footerHref="/register"
       footerLinkText="Criar conta"

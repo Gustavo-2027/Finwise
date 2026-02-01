@@ -4,5 +4,6 @@ export function formatDateBR(iso: string) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(d);
 }

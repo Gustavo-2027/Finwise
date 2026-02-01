@@ -78,7 +78,7 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Entrar</CardTitle>
-        <CardDescription>Acesse sua conta do Finwise</CardDescription>
+        <CardDescription>Acesse sua conta do Valette</CardDescription>
       </CardHeader>
 
       <CardContent>

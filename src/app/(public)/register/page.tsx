@@ -9,7 +9,7 @@ export default function RegisterPage({
   return (
     <AuthShell
       title="Criar conta"
-      description="Comece a organizar suas finanças no Finwise"
+      description="Comece a organizar suas finanças no Valette"
       footerText="Já tem conta?"
       footerHref="/login"
       footerLinkText="Entrar"

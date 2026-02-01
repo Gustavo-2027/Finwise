@@ -1,7 +1,7 @@
 // src/app/(app)/dashboard/loading.tsx
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/shared/ui/skeleton/page";
+import { Skeleton } from "@/shared/ui/skeleton";
 
 function StatSkeleton() {
   return (

@@ -1,37 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
 import { supabaseServer } from "@/infrastructure/supabase/server";
 import { setFlashToast } from "@/shared/flash/flash-toast";
 
-/**
- * Converte "1.234,56" -> 1234.56 (number) antes do z.number()
- */
-const moneyNumber = z.preprocess((val) => {
-  const raw = String(val ?? "").trim();
-  if (!raw) return NaN;
-
-  const normalized = raw.replace(/\./g, "").replace(",", ".");
-  const n = Number(normalized);
-  return n;
-}, z.number().finite("Informe um valor válido.").positive("Informe um valor válido."));
-
-const updateSchema = z.object({
-  id: z.string().uuid(),
-  title: z.string().trim().min(2, "Informe uma descrição."),
-  amount: moneyNumber,
-  type: z.enum(["income", "expense"]),
-  accountId: z.string().uuid("Conta inválida."),
-  categoryId: z.string().uuid("Categoria inválida."),
-  date: z.string().min(10, "Data inválida."),
-  note: z
-    .string()
-    .trim()
-    .max(500, "Observação muito longa (máx. 500 caracteres).")
-    .optional(),
-});
+import { updateTransactionSchema } from "../schemas/transaction-form.schema";
 
 function parseFormData(formData: FormData) {
   return {
@@ -39,8 +13,9 @@ function parseFormData(formData: FormData) {
     title: String(formData.get("title") ?? ""),
     amount: String(formData.get("amount") ?? ""),
     type: String(formData.get("type") ?? "expense"),
+    status: String(formData.get("status") ?? "posted"),
     accountId: String(formData.get("accountId") ?? ""),
-    categoryId: String(formData.get("categoryId") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? ""), // "" = inbox
     date: String(formData.get("date") ?? ""),
     note: String(formData.get("note") ?? ""),
   };
@@ -50,13 +25,13 @@ function toCents(amount: number) {
   return Math.round(amount * 100);
 }
 
-function dateToIso(date: string) {
-  return new Date(`${date}T00:00:00.000Z`).toISOString();
+function dateToIso(dateYYYYMMDD: string) {
+  return new Date(`${dateYYYYMMDD}T12:00:00.000Z`).toISOString();
 }
 
 export async function updateTransactionAction(formData: FormData) {
   const raw = parseFormData(formData);
-  const parsed = updateSchema.safeParse(raw);
+  const parsed = updateTransactionSchema.safeParse(raw);
 
   if (!parsed.success) {
     await setFlashToast({
@@ -79,25 +54,27 @@ export async function updateTransactionAction(formData: FormData) {
     redirect("/login");
   }
 
+  const userId = auth.user.id;
   const input = parsed.data;
 
-  const note = input.note?.trim();
   const occurredAt = dateToIso(input.date);
   const amountCents = toCents(input.amount);
+  const note = input.note?.trim() ? input.note.trim() : null;
 
   const { error } = await supabase
     .from("transactions")
     .update({
       title: input.title,
       type: input.type,
+      status: input.status,
       account_id: input.accountId,
-      category_id: input.categoryId,
+      category_id: input.categoryId, // pode ser null
       occurred_at: occurredAt,
       amount_cents: amountCents,
-      note: note ? note : null,
+      note,
     })
     .eq("id", input.id)
-    .eq("user_id", auth.user.id);
+    .eq("user_id", userId);
 
   if (error) {
     await setFlashToast({
@@ -109,5 +86,7 @@ export async function updateTransactionAction(formData: FormData) {
   }
 
   await setFlashToast({ type: "success", title: "Transação atualizada" });
-  redirect("/transactions");
+
+  // Mantém usuário em um estado previsível.
+  redirect("/transactions?status=all");
 }
